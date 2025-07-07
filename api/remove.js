@@ -12,9 +12,23 @@ export default async function handler(req, res) {
 
     // Initialize TensorFlow.js
     await tf.ready();
+    
+    // Create image element
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = `data:image/jpeg;base64,${imageBase64}`;
+    });
 
-    // Load and decode image
-    const imgTensor = tf.node.decodeImage(Buffer.from(imageBase64, 'base64'));
+    // Create canvas and draw image
+    const canvas = new OffscreenCanvas(img.width, img.height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    
+    // Get image data
+    const imageData = ctx.getImageData(0, 0, img.width, img.height);
+    const tensor = tf.browser.fromPixels(imageData, 3);
     
     // Load the model and perform segmentation
     const net = await bodyPix.load({
@@ -24,38 +38,41 @@ export default async function handler(req, res) {
       quantBytes: 2
     });
     
-    const segmentation = await net.segmentPerson(imgTensor, {
+    const segmentation = await net.segmentPerson(tensor, {
       flipHorizontal: false,
       internalResolution: 'medium',
       segmentationThreshold: 0.7
     });
 
-    // Create output tensor
-    const [height, width] = imgTensor.shape;
-    const outputArray = new Uint8Array(width * height * 4);
-    const inputArray = imgTensor.dataSync();
+    // Create output image data
+    const outputData = new Uint8ClampedArray(img.width * img.height * 4);
+    const inputData = imageData.data;
 
     for (let i = 0; i < segmentation.data.length; i++) {
       const isPerson = segmentation.data[i];
       const baseIdx = i * 4;
-      const inputIdx = i * 3;
       
-      outputArray[baseIdx] = inputArray[inputIdx];     // R
-      outputArray[baseIdx + 1] = inputArray[inputIdx + 1]; // G
-      outputArray[baseIdx + 2] = inputArray[inputIdx + 2]; // B
-      outputArray[baseIdx + 3] = isPerson ? 255 : 0;      // A
+      outputData[baseIdx] = inputData[baseIdx];       // R
+      outputData[baseIdx + 1] = inputData[baseIdx + 1]; // G
+      outputData[baseIdx + 2] = inputData[baseIdx + 2]; // B
+      outputData[baseIdx + 3] = isPerson ? 255 : 0;     // A
     }
 
-    // Convert to base64
-    const buffer = Buffer.from(outputArray);
-    const resultBase64 = buffer.toString('base64');
+    // Create new image data and put it on canvas
+    const outputImageData = new ImageData(outputData, img.width, img.height);
+    ctx.putImageData(outputImageData, 0, 0);
+
+    // Convert to blob and then to base64
+    const blob = await canvas.convertToBlob();
+    const resultBuffer = await blob.arrayBuffer();
+    const resultBase64 = Buffer.from(resultBuffer).toString('base64');
 
     // Cleanup
-    tf.dispose([imgTensor]);
+    tf.dispose(tensor);
 
     res.status(200).json({ imageBase64: resultBase64 });
   } catch (e) {
-    console.error('Error:', e);
-    res.status(500).send('Failed to remove background');
+    console.error('Error:', e.stack);
+    res.status(500).send(`Failed to remove background: ${e.message}`);
   }
 }
