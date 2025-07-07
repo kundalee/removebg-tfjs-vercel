@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "@tensorflow/tfjs": "^4.13.0",
-    "@tensorflow-models/body-pix": "^2.0.5"
+    "@tensorflow/tfjs-node": "^4.13.0",
+    "@tensorflow-models/body-pix": "^2.0.5",
+    "canvas": "^2.11.2"
   }
 }

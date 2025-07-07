@@ -1,5 +1,6 @@
-import * as tf from '@tensorflow/tfjs';
+import * as tf from '@tensorflow/tfjs-node';
 import * as bodyPix from '@tensorflow-models/body-pix';
+import { createCanvas, Image } from 'canvas';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -10,15 +11,12 @@ export default async function handler(req, res) {
     const { imageBase64 } = req.body;
     if (!imageBase64) return res.status(400).send('Missing imageBase64');
 
-    // Create an off-screen canvas
+    // Create canvas and load image
     const img = new Image();
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = `data:image/png;base64,${imageBase64}`;
-    });
+    const buffer = Buffer.from(imageBase64, 'base64');
+    img.src = buffer;
 
-    const canvas = new OffscreenCanvas(img.width, img.height);
+    const canvas = createCanvas(img.width, img.height);
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
 
@@ -27,11 +25,7 @@ export default async function handler(req, res) {
     const segmentation = await net.segmentPerson(canvas);
 
     const imageData = ctx.getImageData(0, 0, img.width, img.height);
-    const newImageData = new ImageData(
-      new Uint8ClampedArray(imageData.data.length),
-      imageData.width,
-      imageData.height
-    );
+    const newImageData = ctx.createImageData(imageData);
 
     for (let i = 0; i < segmentation.data.length; i++) {
       const isPerson = segmentation.data[i] === 1;
@@ -42,9 +36,8 @@ export default async function handler(req, res) {
     }
 
     ctx.putImageData(newImageData, 0, 0);
-    const blob = await canvas.convertToBlob();
-    const resultBuffer = await blob.arrayBuffer();
-    const resultBase64 = Buffer.from(resultBuffer).toString('base64');
+    const resultBuffer = canvas.toBuffer('image/png');
+    const resultBase64 = resultBuffer.toString('base64');
 
     res.status(200).json({ imageBase64: resultBase64 });
   } catch (e) {
