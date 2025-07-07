@@ -1,4 +1,4 @@
-import { removeBackground } from '@rembg/node';
+import { removeBackground } from '@imgly/background-removal';
 import sharp from 'sharp';
 
 export default async function handler(req, res) {
@@ -27,31 +27,25 @@ export default async function handler(req, res) {
       })
       .toBuffer();
 
-    // 使用 rembg 移除背景
+    // 使用 imgly 移除背景
     const outputBuffer = await removeBackground(preprocessedBuffer, {
-      model: 'u2net_cloth', // 使用專門的服飾模型
-      postprocessing: {
-        alpha_matting: true,
-        alpha_matting_foreground_threshold: 240,
-        alpha_matting_background_threshold: 10,
-        alpha_matting_erode_size: 10
-      }
+      quality: 'best',
+      refine: true,
+      format: 'png'
     });
 
-    // 後處理：優化邊緣和透明度
+    // 後處理：優化輸出
     const finalBuffer = await sharp(outputBuffer)
-      // 輕微模糊以平滑邊緣
-      .blur(0.3)
-      // 調整透明度閾值
-      .bandbool(3, 'and')
-      // 確保輸出為 PNG 以保持透明度
+      // 輕微銳化以保持細節
+      .sharpen(0.5)
+      // 確保輸出為高品質 PNG
       .png({
         quality: 100,
         compressionLevel: 9
       })
       .toBuffer();
 
-    // 轉換回 base64
+    // 轉換為 base64
     const resultBase64 = finalBuffer.toString('base64');
 
     res.status(200).json({ imageBase64: resultBase64 });

@@ -6,8 +6,7 @@
     "node": "18.x"
   },
   "dependencies": {
-    "@tensorflow/tfjs": "^4.13.0",
-    "@rembg/node": "^2.0.1",
+    "@imgly/background-removal": "^1.4.5",
     "sharp": "^0.33.2"
   }
 }
