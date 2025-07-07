@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": "18.x"
   },
   "dependencies": {
     "@tensorflow/tfjs": "^4.13.0",
     "@tensorflow-models/body-pix": "^2.0.5",
-    "canvas": "^2.11.2"
+    "sharp": "^0.33.2"
   }
 }

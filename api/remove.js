@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import * as bodyPix from '@tensorflow-models/body-pix';
-import { createCanvas, Image, loadImage } from 'canvas';
+import sharp from 'sharp';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,18 +14,16 @@ export default async function handler(req, res) {
     // Initialize TensorFlow.js
     await tf.ready();
     
-    // Load image using canvas
-    const buffer = Buffer.from(imageBase64, 'base64');
-    const img = await loadImage(buffer);
-
-    // Create canvas and draw image
-    const canvas = createCanvas(img.width, img.height);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
+    // Convert base64 to buffer
+    const inputBuffer = Buffer.from(imageBase64, 'base64');
     
-    // Get image data
-    const imageData = ctx.getImageData(0, 0, img.width, img.height);
-    const tensor = tf.browser.fromPixels(imageData, 3);
+    // Process image with sharp
+    const { data, info } = await sharp(inputBuffer)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Convert to tensor
+    const tensor = tf.tensor3d(new Uint8Array(data), [info.height, info.width, info.channels]);
     
     // Load the model and perform segmentation
     const net = await bodyPix.load({
@@ -41,25 +39,34 @@ export default async function handler(req, res) {
       segmentationThreshold: 0.7
     });
 
-    // Create output image data
-    const outputData = ctx.createImageData(img.width, img.height);
-    const inputData = imageData.data;
+    // Create output buffer
+    const outputData = new Uint8Array(info.width * info.height * 4);
+    const inputData = new Uint8Array(data);
 
     for (let i = 0; i < segmentation.data.length; i++) {
       const isPerson = segmentation.data[i];
-      const baseIdx = i * 4;
+      const inputIdx = i * info.channels;
+      const outputIdx = i * 4;
       
-      outputData.data[baseIdx] = inputData[baseIdx];       // R
-      outputData.data[baseIdx + 1] = inputData[baseIdx + 1]; // G
-      outputData.data[baseIdx + 2] = inputData[baseIdx + 2]; // B
-      outputData.data[baseIdx + 3] = isPerson ? 255 : 0;     // A
+      outputData[outputIdx] = inputData[inputIdx];     // R
+      outputData[outputIdx + 1] = inputData[inputIdx + 1]; // G
+      outputData[outputIdx + 2] = inputData[inputIdx + 2]; // B
+      outputData[outputIdx + 3] = isPerson ? 255 : 0;     // A
     }
 
-    // Put the processed image data back to canvas
-    ctx.putImageData(outputData, 0, 0);
+    // Convert to PNG with transparency
+    const resultBuffer = await sharp(outputData, {
+      raw: {
+        width: info.width,
+        height: info.height,
+        channels: 4
+      }
+    })
+      .png()
+      .toBuffer();
 
     // Convert to base64
-    const resultBase64 = canvas.toBuffer().toString('base64');
+    const resultBase64 = resultBuffer.toString('base64');
 
     // Cleanup
     tf.dispose(tensor);
