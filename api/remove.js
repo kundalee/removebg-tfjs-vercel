@@ -1,5 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import * as bodyPix from '@tensorflow-models/body-pix';
+import { createCanvas, Image, loadImage } from 'canvas';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,16 +14,12 @@ export default async function handler(req, res) {
     // Initialize TensorFlow.js
     await tf.ready();
     
-    // Create image element
-    const img = new Image();
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = `data:image/jpeg;base64,${imageBase64}`;
-    });
+    // Load image using canvas
+    const buffer = Buffer.from(imageBase64, 'base64');
+    const img = await loadImage(buffer);
 
     // Create canvas and draw image
-    const canvas = new OffscreenCanvas(img.width, img.height);
+    const canvas = createCanvas(img.width, img.height);
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
     
@@ -45,27 +42,24 @@ export default async function handler(req, res) {
     });
 
     // Create output image data
-    const outputData = new Uint8ClampedArray(img.width * img.height * 4);
+    const outputData = ctx.createImageData(img.width, img.height);
     const inputData = imageData.data;
 
     for (let i = 0; i < segmentation.data.length; i++) {
       const isPerson = segmentation.data[i];
       const baseIdx = i * 4;
       
-      outputData[baseIdx] = inputData[baseIdx];       // R
-      outputData[baseIdx + 1] = inputData[baseIdx + 1]; // G
-      outputData[baseIdx + 2] = inputData[baseIdx + 2]; // B
-      outputData[baseIdx + 3] = isPerson ? 255 : 0;     // A
+      outputData.data[baseIdx] = inputData[baseIdx];       // R
+      outputData.data[baseIdx + 1] = inputData[baseIdx + 1]; // G
+      outputData.data[baseIdx + 2] = inputData[baseIdx + 2]; // B
+      outputData.data[baseIdx + 3] = isPerson ? 255 : 0;     // A
     }
 
-    // Create new image data and put it on canvas
-    const outputImageData = new ImageData(outputData, img.width, img.height);
-    ctx.putImageData(outputImageData, 0, 0);
+    // Put the processed image data back to canvas
+    ctx.putImageData(outputData, 0, 0);
 
-    // Convert to blob and then to base64
-    const blob = await canvas.convertToBlob();
-    const resultBuffer = await blob.arrayBuffer();
-    const resultBase64 = Buffer.from(resultBuffer).toString('base64');
+    // Convert to base64
+    const resultBase64 = canvas.toBuffer().toString('base64');
 
     // Cleanup
     tf.dispose(tensor);
