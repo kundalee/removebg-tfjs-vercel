@@ -1,4 +1,4 @@
-import { removeBackground } from '@imgly/background-removal';
+import { removeBackground } from '@imgly/background-removal-node';
 import sharp from 'sharp';
 
 export default async function handler(req, res) {
